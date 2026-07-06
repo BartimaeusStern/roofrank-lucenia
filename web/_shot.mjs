@@ -1,0 +1,11 @@
+import { chromium } from "playwright";
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+await p.goto("http://localhost:3000", { waitUntil: "domcontentloaded" });
+await p.evaluate(() => localStorage.setItem('roofrank-theme','light'));
+await p.reload({ waitUntil: "domcontentloaded" });
+await p.waitForSelector('[data-testid="result"]', { timeout: 40000 });
+await p.waitForTimeout(2500);
+await p.screenshot({ path: "/tmp/rr-improvements.png" });
+console.log("fit+draw+top10 shot saved");
+await b.close();
