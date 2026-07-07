@@ -65,9 +65,10 @@ def container(cx, mid_y, title, items):
     rect(cx, y, W, h, color=AMBER)
     text(cx, y+10, W, 26, title, size=19, color=AMBER)
     iy = y + TITLE_H
+    th = round(14 * 1.25)  # single text line height; center it in the box
     for it in items:
         rect(cx+(W-IW)/2, iy, IW, IH, color=INK)
-        text(cx+(W-IW)/2, iy, IW, IH, it, size=14, color=INK)
+        text(cx+(W-IW)/2, iy+(IH-th)/2, IW, th, it, size=14, color=INK)
         iy += IH + GAP
     return cx, y, W, h
 
@@ -75,12 +76,12 @@ def container(cx, mid_y, title, items):
 C0, C1, C2, C3 = 40, 440, 840, 1260
 ING, QRY, LUC = 175, 575, 375
 
-p = container(C0, ING, "Parcel source", ["400 synthetic commercial", "6 live Google-Solar", "~100 residential (75218)"])
+p = container(C0, ING, "Parcel Source", ["400 synthetic commercial", "6 live Google-Solar", "~100 residential (75218)"])
 s = container(C1, ING, "Google Solar API", ["buildingInsights.findClosest", "roofSegmentStats", "solarPanelConfigs (kWh)", "maxSunshineHoursPerYear"])
-t = container(C2, ING, "transform + score + embed", ["map roof fields (toParcel)", "solar_score 0-100", "MiniLM 384-dim embed", "bulk index into Lucenia"])
+t = container(C2, ING, "Transform + Score + Embed", ["map roof fields (toParcel)", "solar_score 0-100", "MiniLM 384-dim embed", "bulk index into Lucenia"])
 l = container(C3, LUC, "Lucenia (Docker)", ["parcels index", "geo_point + knn_vector + text", "hybrid BM25 + kNN fusion", "geohash_grid heat agg"])
 u = container(C1, QRY, "Next.js UI", ["map + heat + draw region", "filters + NL search", "ranked list + parcel drawer"])
-h = container(C2, QRY, "Route handlers", ["/api/search (hybrid)", "/api/heatmap (geohash)", "/api/parcel/[id]", "opensearch-js client"])
+h = container(C2, QRY, "Route Handlers", ["/api/search (hybrid)", "/api/heatmap (geohash)", "/api/parcel/[id]", "opensearch-js client"])
 
 def right(c): return c[0]+c[2]
 def left(c):  return c[0]

@@ -48,7 +48,14 @@ Solar customer acquisition is expensive (installers pay $100-300+ per qualified 
 
 The clearest demo: toggle **Structured** vs **Hybrid** on the same filters. Structured ranks the shiny new-roof warehouse first (highest score); Hybrid surfaces the *aging* roof that reads as a re-roof-plus-solar candidate, an intent a filter UI can't express. That is the "Lucenia is the ideal technical choice" proof.
 
-**Why now:** ("§" is the section symbol for a numbered part of the U.S. tax code, so §48E means Internal Revenue Code Section 48E.) Under OBBBA (2025) the owner-purchased residential solar credit (**§25D**) expired **2025-12-31**, and the begin-construction safe harbor for the **commercial clean-electricity credit (§48E/45Y)** closed **2026-07-04**, the live federal deadline now is **placed in service by 2027-12-31**. That pushes residential demand toward **third-party-owned (lease/PPA)** systems, which still capture ~30% via §48E because the owner is a business. So the commercial and residential-via-TPO segments RoofRank ranks now share one urgent federal deadline, which is exactly the moment a prospecting tool earns its keep.
+**Why now**
+
+("§" is the section symbol for a numbered part of the U.S. tax code, so **§48E** means Internal Revenue Code Section 48E.)
+
+- Under OBBBA (2025), the owner-purchased residential solar credit (**§25D**) expired **2025-12-31**.
+- The begin-construction safe harbor for the commercial clean-electricity credit (**§48E**/**45Y**) closed **2026-07-04**; the live federal deadline is now placed in service by **2027-12-31**.
+- That pushes residential demand toward third-party-owned (lease/PPA) systems, which still capture ~30% via **§48E** because the owner is a business.
+- So the commercial and residential-via-TPO segments RoofRank ranks now share one urgent federal deadline, which is exactly when a prospecting tool earns its keep.
 
 ---
 
