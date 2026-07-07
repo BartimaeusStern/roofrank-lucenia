@@ -6,7 +6,7 @@ export const INDEX = "parcels";
 export const client = new Client({
   node: process.env.ENGINE_URL || "https://localhost:9200",
   auth: { username: "admin", password: process.env.LUCENIA_ADMIN_PASSWORD || "RoofRank!2026Dev" },
-  // ponytail: local self-signed dev node; production terminates TLS with a real CA.
+  // local self-signed dev node; production terminates TLS with a real CA.
   ssl: { rejectUnauthorized: false },
 });
 

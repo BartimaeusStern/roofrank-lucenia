@@ -44,9 +44,11 @@ Solar customer acquisition is expensive (installers pay $100-300+ per qualified 
 | Ranking prospects by a composite `solar_score` | **Lucenia** |
 | Roof geometry, azimuth/pitch/area, sunshine, panel layout, kWh | Google Solar API (ingest helper) |
 
-The money shot: toggle **Structured** vs **Hybrid** on the same filters. Structured ranks the shiny new-roof warehouse first (highest score); Hybrid surfaces the *aging* roof that reads as a re-roof-plus-solar candidate, an intent a filter UI can't express. That is the "Lucenia is the ideal technical choice" proof.
+> **BM25** is the standard keyword-relevance ranking that powers Lucene/OpenSearch text search (it scores how well a document's words match the query). **kNN** ("k nearest neighbors") ranks by vector similarity between the query's embedding and each document's embedding, so it matches on meaning rather than exact words. Hybrid search blends the two.
 
-**Why now:** under OBBBA (2025) the owner-purchased residential credit (§25D) expired **2025-12-31**, and the begin-construction safe harbor for the **commercial §48E/45Y credit** closed **2026-07-04**, the live federal deadline now is **placed in service by 2027-12-31**. That pushes residential demand toward **third-party-owned (lease/PPA)** systems, which still capture ~30% via §48E because the owner is a business. So the commercial and residential-via-TPO segments RoofRank ranks now share one urgent federal deadline, which is exactly the moment a prospecting tool earns its keep.
+The clearest demo: toggle **Structured** vs **Hybrid** on the same filters. Structured ranks the shiny new-roof warehouse first (highest score); Hybrid surfaces the *aging* roof that reads as a re-roof-plus-solar candidate, an intent a filter UI can't express. That is the "Lucenia is the ideal technical choice" proof.
+
+**Why now:** ("§" is the section symbol for a numbered part of the U.S. tax code, so §48E means Internal Revenue Code Section 48E.) Under OBBBA (2025) the owner-purchased residential solar credit (**§25D**) expired **2025-12-31**, and the begin-construction safe harbor for the **commercial clean-electricity credit (§48E/45Y)** closed **2026-07-04**, the live federal deadline now is **placed in service by 2027-12-31**. That pushes residential demand toward **third-party-owned (lease/PPA)** systems, which still capture ~30% via §48E because the owner is a business. So the commercial and residential-via-TPO segments RoofRank ranks now share one urgent federal deadline, which is exactly the moment a prospecting tool earns its keep.
 
 ---
 
@@ -62,7 +64,7 @@ Two paths meet at Lucenia. The **ingest** path runs once, offline; the **query**
 - **Lucenia (Docker)**, the `parcels` index: `geo_point` + `knn_vector` + numeric/keyword/text fields, serving hybrid BM25 + kNN queries and the geohash heat aggregation.
 - **Next.js UI → Route handlers**, the browser talks only to Next.js route handlers, which query Lucenia through the opensearch-js client.
 
-_Diagram source: [`docs/diagrams/architecture.dot`](docs/diagrams/architecture.dot) (rendered to SVG with excalidraw-cli)._
+_Diagram source: [`docs/diagrams/build_architecture.py`](docs/diagrams/build_architecture.py) (emits `architecture.excalidraw`, rendered to SVG with excalidraw-cli)._
 
 - **Engine:** Lucenia `skylite 0.11.0` (OpenSearch 2.14 wire-compatible). Hybrid ranking fuses BM25 + filtered kNN **client-side** (min-max normalize each score list, then weighted combine). Lucenia's native `hybrid` query works on this node, but it returns a single combined score per doc and there is no functional score-normalization step to weight the sub-queries (see the verified note below), so **client-side fusion is the only way to get real, tunable `[BM25, kNN]` weights** on this build, not just a workaround. Verified: flipping the client weights reorders results on the live node.
 - **Embeddings:** local MiniLM (`@huggingface/transformers`, `all-MiniLM-L6-v2`, 384-dim). Private, no external embedding calls.
@@ -78,7 +80,7 @@ Lucenia tracks the OpenSearch 2.14 API, but its docs describe a superset of what
 
 These are version facts about `skylite 0.11.0`, not permanent Lucenia limits, a build that ships a functional `normalization-processor` could move fusion server-side unchanged, since the app already speaks the `hybrid` query shape.
 
-### Data (and an honest note on Google's terms)
+### Data and Google's caching policy
 
 The searchable corpus is **~400 synthetic DFW commercial parcels** (reproducible, seeded) plus **6 real commercial parcels enriched live via the Google Solar API** (labeled `LIVE · Google Solar`) and **~100 real residential parcels in ZIP 75218** (exact-address-geocoded houses + real Redfin for-sale listings with list price, beds/baths, and living area). This split is deliberate: Google's Solar API policy **restricts caching/storing** its results, so a production build cannot pre-index Google's per-building data at scale. The production-clean path (described, not built here) is to **compute solar potential from open rasters** (USGS LiDAR DSM + NREL NSRDB + PVWatts) and index *your* derived values in Lucenia, with Google Solar used only live at view-time. "Compute and index, don't cache a vendor's API."
 
@@ -175,6 +177,8 @@ docker run -d -p 9200:9200 -e discovery.type=single-node \
 # then the same npm run seed / dev
 ```
 
+On base OpenSearch the core demo behaves the same: hybrid BM25 + kNN, geo filtering, and the geohash heatmap all rely on standard APIs. What you give up is Lucenia's own ground: it is built on a newer Apache Lucene for faster vector and hybrid retrieval, and it ships native AI-retrieval processors (`retrieval_augmented_generation`, `retrieval_grounding`, `multimodal_rerank`, `ml_inference`) that base OpenSearch 2.14 does not. Those are exactly what the roadmap's in-engine "why this roof" summaries and learned reranking would build on, so Lucenia is the engine you would keep for the next stage, not just this MVP.
+
 **Notes:** the browser map needs the **Maps JavaScript API** enabled on the key (the Solar API alone is server-side); if it isn't, the app degrades gracefully (the ranked list + search still work). The local Lucenia node uses a self-signed cert, so the server-side client sets `rejectUnauthorized:false` for `localhost` only; production terminates TLS with a real CA.
 
 ---
@@ -204,15 +208,15 @@ _Diagram source: [`docs/diagrams/structure.dot`](docs/diagrams/structure.dot)._
 
 ## Key decisions
 
-- **Lucenia is the hero, Google is the helper.** The search/rank experience is the product; Google Solar only enriches at ingest.
+- **Lucenia is the core engine.** RoofRank runs on Lucenia for search, ranking, geo, and aggregation; that retrieval experience is the product. Google's Solar API is a narrow tool layered on top, used only at ingest to read the solar-specific physics of each roof.
 - **Semantic query is the differentiator** (the one axis no competitor has).
 - **Hybrid data** sidesteps Google's caching restriction and keeps the demo fully populated.
 - **`solar_score`** uses energy/roof metrics (kWh, area, sunshine, roof-age favorability), not Google's residential-tuned financial model.
-- Built lean (ponytail): one app, one search client, local embeddings over a hosted pipeline, Tailwind tokens over a component-library dependency, HTML quote over a PDF lib.
+- **Built lean:** one app, one search client, a local embedding model instead of a hosted pipeline, Tailwind design tokens instead of a component-library dependency, and an HTML quote instead of a PDF library.
 
 ## Not in this MVP
 
-Scoped out for now. Each of these is a natural next build:
+Scoped out for now. These are the features I want to build next:
 
 - **AI outreach / SDR agent**
   - *What:* auto-draft and send the first-touch email or call script to a ranked prospect, personalized with that roof's numbers (size, sun, draft quote).

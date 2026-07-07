@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ponytail: M1 query-validation spike. Stdlib only. Proves Lucenia's hybrid +
+# M1 query-validation spike. Stdlib only. Proves Lucenia's hybrid +
 # geo + filter DSL works and that the semantic clause reorders results vs a
 # structured-only query. Pseudo-vectors (not real MiniLM) are fine here: the
 # goal is to de-risk the query DSL, not embedding quality. M2 swaps in MiniLM.
