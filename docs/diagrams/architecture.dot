@@ -1,0 +1,14 @@
+digraph architecture {
+  rankdir=LR;
+  node [shape=box];
+
+  parcels   [label="Parcel source"];
+  solar     [label="Google Solar API"];
+  transform [label="transform + score + embed"];
+  lucenia   [label="Lucenia (Docker)"];
+  ui        [label="Next.js UI"];
+  routes    [label="Route handlers"];
+
+  parcels -> solar -> transform -> lucenia [label="ingest"];
+  ui -> routes -> lucenia [label="query"];
+}

@@ -1,0 +1,24 @@
+digraph structure {
+  rankdir=LR;
+  node [shape=box];
+
+  root    [label="roofrank/"];
+  compose [label="docker-compose.yml"];
+  spike   [label="spike.py"];
+  web     [label="web/  (Next.js app)"];
+
+  lib     [label="lib/  (engine, query, score, ...)"];
+  scripts [label="scripts/  (seed, enrich-*, e2e)"];
+  app     [label="app/  (api routes, page)"];
+  comp    [label="components/  (UI)"];
+  tests   [label="tests/  (node:test)"];
+
+  root -> compose;
+  root -> spike;
+  root -> web;
+  web -> lib;
+  web -> scripts;
+  web -> app;
+  web -> comp;
+  web -> tests;
+}

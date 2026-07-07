@@ -1,10 +1,29 @@
-# RoofRank
+<p align="center">
+  <img src="web/public/logo.svg" width="76" alt="RoofRank logo" />
+</p>
 
-**Commercial-solar prospecting as a search problem.** A solar sales team draws a region on a map, types a plain-language intent ("aging flat warehouse roofs that read as re-roof-plus-solar candidates"), and gets back a ranked, heat-colored map of the best rooftops to pitch, before the commercial clean-energy tax credit deadline.
+<h1 align="center">RoofRank</h1>
+
+<p align="center"><em>Commercial and residential solar prospecting as a search problem, built on Lucenia.</em></p>
+
+---
+
+**Commercial-solar prospecting as a search problem.** A solar sales team draws a region on a map, types a plain-language intent ("aging flat warehouse roofs that read as re-roof-plus-solar candidates"), and gets back a ranked, heat-colored map of the best rooftops to pitch before the commercial clean-energy tax credit deadline.
 
 Built on **Lucenia** (the retrieval engine) with **Google's Solar API** as an ingest-time enrichment helper.
 
-**Contents:** [Why Lucenia](#why-this-and-why-lucenia) · [Architecture](#architecture) · [Verified on the live node](#verified-on-lucenia-skylite-0110-tested-against-the-live-node-not-assumed) · [Lucenia vs Google: API surface](#api-surface-which-calls-are-lucenia-vs-google) · [More Lucenia features in use](#more-lucenia-features-in-use-beyond-the-core-hybrid-query) · [How ranking works](#how-ranking-works) · [Run it](#run-it) · [Project structure](#project-structure) · [Prospecting UX](#prospecting-ux) · [Key decisions](#key-decisions)
+## Contents
+
+- **I.** [Why RoofRank, and why Lucenia](#why-this-and-why-lucenia)
+- **II.** [Architecture](#architecture)
+- **III.** [Verified on Lucenia skylite 0.11.0](#verified-on-lucenia-skylite-0110)
+- **IV.** [Lucenia vs Google: the API surface](#api-surface-which-calls-are-lucenia-vs-google)
+- **V.** [More Lucenia features in use](#more-lucenia-features-in-use-beyond-the-core-hybrid-query)
+- **VI.** [How ranking works](#how-ranking-works)
+- **VII.** [Run it](#run-it)
+- **VIII.** [Project structure](#project-structure)
+- **IX.** [Prospecting UX](#prospecting-ux)
+- **X.** [Key decisions](#key-decisions)
 
 ---
 
@@ -33,23 +52,25 @@ The money shot: toggle **Structured** vs **Hybrid** on the same filters. Structu
 
 ## Architecture
 
-```
-Parcel source ──► Google Solar API ──► transform+score+embed ──► Lucenia (Docker)
-(synthetic bulk    (buildingInsights,    (MiniLM 384-dim,          parcels index:
- + a few real       ingest-time only)     solar_score)             geo_shape + knn_vector
- DFW addresses)                                                    + numeric/keyword/text)
-                                                                          ▲
-                            Next.js UI ──► route handlers (opensearch-js) ─┘
-                            (Google Map + heat cells + filters + NL search + ranked list + quote)
-```
+![RoofRank architecture](docs/diagrams/architecture.svg)
+
+Two paths meet at Lucenia. The **ingest** path runs once, offline; the **query** path runs on every search.
+
+- **Parcel source**, the corpus that gets indexed: 400 synthetic DFW commercial parcels (seeded, reproducible), 6 real commercial parcels enriched live via Google Solar, and ~100 real residential parcels in ZIP 75218.
+- **Google Solar API**, `buildingInsights.findClosest` supplies roof geometry per building. Ingest-time only; never called during a search.
+- **transform + score + embed**, each parcel gets a `solar_score` (0-100) and a 384-dim MiniLM description vector, computed locally.
+- **Lucenia (Docker)**, the `parcels` index: `geo_point` + `knn_vector` + numeric/keyword/text fields, serving hybrid BM25 + kNN queries and the geohash heat aggregation.
+- **Next.js UI → Route handlers**, the browser talks only to Next.js route handlers, which query Lucenia through the opensearch-js client.
+
+_Diagram source: [`docs/diagrams/architecture.dot`](docs/diagrams/architecture.dot) (rendered to SVG with excalidraw-cli)._
 
 - **Engine:** Lucenia `skylite 0.11.0` (OpenSearch 2.14 wire-compatible). Hybrid ranking fuses BM25 + filtered kNN **client-side** (min-max normalize each score list, then weighted combine). Lucenia's native `hybrid` query works on this node, but it returns a single combined score per doc and there is no functional score-normalization step to weight the sub-queries (see the verified note below), so **client-side fusion is the only way to get real, tunable `[BM25, kNN]` weights** on this build, not just a workaround. Verified: flipping the client weights reorders results on the live node.
 - **Embeddings:** local MiniLM (`@huggingface/transformers`, `all-MiniLM-L6-v2`, 384-dim). Private, no external embedding calls.
 - **App:** one Next.js 16 app. Route handlers are the API (client never talks to Lucenia directly). Tailwind v4 design tokens (solar/amber), `@vis.gl/react-google-maps` for the map.
 
-### Verified on Lucenia skylite 0.11.0 (tested against the live node, not assumed)
+### Verified on Lucenia skylite 0.11.0
 
-Lucenia tracks the OpenSearch 2.14 API, but its docs describe a superset of what this build ships. Rather than trust the docs, each of these was tested directly against the running node:
+Lucenia tracks the OpenSearch 2.14 API, but its docs describe a superset of what this build ships. Each of these was checked against the running node:
 
 - **`hybrid` query clause, present and works.** `{"query":{"hybrid":{"queries":[{match…},{knn…}]}}}` returns results. But without a working normalization step it emits a single un-normalized combined score and ignores per-query weights (below), so it can't drive tunable fusion on its own.
 - **`normalization-processor`, accepted but inert on this build.** `PUT /_search/pipeline` with a `normalization-processor` returns `acknowledged:true`, yet: (a) flipping its weights `[0.95,0.05]`↔`[0.05,0.95]` does not reorder results, (b) with-pipeline scores are byte-identical to no-pipeline and are raw (≈4.6, not a normalized 0–1), and (c) `_nodes/search_pipelines` registers **no `phase_results_processors`** at all. So real BM25/kNN weighting is done **client-side** (`lib/query.mjs` `mergeHybrid`: min-max normalize each list, then weighted combine), the only path to tunable weights here.
@@ -97,7 +118,7 @@ Each of these is **built and live**, and was verified against the running node:
 - **`geo_polygon` query → "Draw region".** Click vertices on the map to filter by an arbitrary polygon instead of the rectangular viewport (verified: a polygon over 75218 returns 108 parcels, all inside, vs ~468 for the bounding box). Note: Google removed `DrawingManager` in Maps JS 3.65, so the polygon is collected via map-click vertices on a plain `google.maps.Polygon`.
 - **`knn.algo_param.ef_search = 256`** (raised from the default 100) for kNN recall headroom.
 
-**Registered on the node but intentionally not wired (needs an ML model/connector):** `retrieval_augmented_generation` / `retrieval_grounding` (native in-engine RAG), `multimodal_rerank`, `ml_inference`. Probed, not assumed: a `retrieval_augmented_generation` pipeline errors requiring `context_field_list` + a registered model. These are the on-thesis path to in-engine "why this roof" summaries or learned reranking, and are precisely why a *separate* RAG stack (e.g. LightRAG, which was evaluated and rejected) is unnecessary here: Lucenia already owns that surface.
+**Registered on the node but intentionally not wired (needs an ML model/connector):** `retrieval_augmented_generation` / `retrieval_grounding` (native in-engine RAG), `multimodal_rerank`, `ml_inference`. A `retrieval_augmented_generation` pipeline errors on setup, requiring a `context_field_list` and a registered model. These are the on-thesis path to in-engine "why this roof" summaries or learned reranking, and are precisely why a *separate* RAG stack (e.g. LightRAG, which was evaluated and rejected) is unnecessary here: Lucenia already owns that surface.
 
 ---
 
@@ -160,16 +181,18 @@ docker run -d -p 9200:9200 -e discovery.type=single-node \
 
 ## Project structure
 
-```
-docker-compose.yml        Lucenia node (port 9200, mounts trial.crt + license env)
-trial.crt                 Lucenia license (gitignored)
-spike.py                  M1 query-validation spike (engine-agnostic, all checks pass)
-web/
-  lib/  engine, schema, embed, score, generate, solar, query   (.mjs, shared by scripts + API)
-  scripts/  seed, enrich-live, enrich-residential, enrich-redfin, enrich-zip, scrape-year-built, e2e
-  app/  page.tsx, layout.tsx, globals.css, api/{search,parcel/[id],heatmap}/route.ts
-  components/  RoofRank, FilterPanel, ResultsList, ParcelDrawer, MapView
-```
+![RoofRank project structure](docs/diagrams/structure.svg)
+
+- **`docker-compose.yml`**, the Lucenia node (port 9200, mounts `trial.crt` + license env).
+- **`spike.py`**, the M1 query-DSL spike (engine-agnostic, validates the search shape).
+- **`web/`**, the Next.js app, which holds everything else:
+  - **`lib/`**, the `.mjs` core shared by scripts and the API: `engine`, `schema`, `embed`, `score`, `generate`, `solar`, `query`, `geohash`.
+  - **`scripts/`**, ingest + verification: `seed`, `enrich-live`, `enrich-residential`, `enrich-redfin`, `enrich-zip`, `scrape-year-built`, `e2e`.
+  - **`app/`**, `page.tsx`, `layout.tsx`, `globals.css`, and the API route handlers `api/{search, parcel/[id], heatmap}`.
+  - **`components/`**, the UI: `RoofRank`, `FilterPanel`, `ResultsList`, `ParcelDrawer`, `MapView`.
+  - **`tests/`**, `node:test` unit suites: `score`, `query`, `geohash`, `solar`, `generate`.
+
+_Diagram source: [`docs/diagrams/structure.dot`](docs/diagrams/structure.dot)._
 
 ## Prospecting UX
 
@@ -187,6 +210,23 @@ web/
 - **`solar_score`** uses energy/roof metrics (kWh, area, sunshine, roof-age favorability), not Google's residential-tuned financial model.
 - Built lean (ponytail): one app, one search client, local embeddings over a hosted pipeline, Tailwind tokens over a component-library dependency, HTML quote over a PDF lib.
 
-## Not in this MVP (deliberately)
+## Not in this MVP
 
-Real outreach / AI-SDR, a generative "panels on your building" render pipeline, user accounts / saved searches / lead tracking (a future Supabase layer), multi-region on-demand scan.
+Scoped out for now. Each of these is a natural next build:
+
+- **AI outreach / SDR agent**
+  - *What:* auto-draft and send the first-touch email or call script to a ranked prospect, personalized with that roof's numbers (size, sun, draft quote).
+  - *How:* a queue over the ranked results feeding an LLM template, wired to an email/dialer API, with reply tracking; Lucenia's `retrieval_grounding` processor could ground each message in the parcel's own fields.
+  - *Advantage:* closes the loop from "found the roof" to "booked the meeting," the step installers actually pay for.
+- **Generative "panels on your building" render**
+  - *What:* a photorealistic image of the specific building with panels laid onto its real roof planes, attached to the outreach.
+  - *How:* pull the roof-segment geometry already stored per parcel, composite panels onto Google/aerial imagery via an image model.
+  - *Advantage:* renders reportedly lift outreach open/response rates several-fold over a text quote.
+- **Accounts, saved searches, and lead tracking**
+  - *What:* per-user login, saved regions/queries, and a pipeline board of contacted prospects.
+  - *How:* a Supabase (Postgres + auth) layer alongside Lucenia; Lucenia stays the search engine, Supabase holds user/CRM state.
+  - *Advantage:* turns a one-off search tool into a repeat-use workflow a sales team lives in.
+- **On-demand, any-region scan**
+  - *What:* let a user drop into a brand-new metro and have parcels enriched and indexed on the fly, rather than the pre-seeded DFW corpus.
+  - *How:* the production ingest path in [Architecture](#architecture) (compute solar potential from open LiDAR/NSRDB rasters, then index into Lucenia) run as a background job per requested region.
+  - *Advantage:* national coverage without pre-indexing the whole country, and it sidesteps the Google caching limit by computing our own values.

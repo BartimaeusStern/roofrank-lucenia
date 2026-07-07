@@ -17,7 +17,10 @@ export default function FilterPanel(p: Props) {
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">Roof<span className="text-accent">Rank</span></h1>
+        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
+          <img src="/logo.svg" alt="" width={26} height={26} className="shrink-0" />
+          <span>Roof<span className="text-accent">Rank</span></span>
+        </h1>
         <p className="mt-0.5 text-xs text-muted">
           Commercial solar prospecting on Lucenia. Rank DFW rooftops for the federal §48E clean-energy credit (systems placed in service by 2027-12-31).
         </p>
