@@ -11,6 +11,8 @@
     "res": "node --env-file=.env scripts/enrich-residential.mjs",
     "zip": "node --env-file=.env scripts/enrich-zip.mjs",
     "redfin": "node --env-file=.env scripts/enrich-redfin.mjs",
+    "ml-setup": "node --env-file=.env scripts/ml-setup.mjs",
+    "ml-verify": "node --env-file=.env scripts/ml-verify.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:e2e": "node scripts/e2e.mjs"
   },

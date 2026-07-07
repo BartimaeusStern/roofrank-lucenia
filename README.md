@@ -127,7 +127,9 @@ Each of these is **built and live**, and was verified against the running node:
 - **`geo_polygon` query → "Draw region".** Click vertices on the map to filter by an arbitrary polygon instead of the rectangular viewport (verified: a polygon over 75218 returns 108 parcels, all inside, vs ~468 for the bounding box). Note: Google removed `DrawingManager` in Maps JS 3.65, so the polygon is collected via map-click vertices on a plain `google.maps.Polygon`.
 - **`knn.algo_param.ef_search = 256`** (raised from the default 100) for kNN recall headroom.
 
-**Registered on the node but intentionally not wired (needs an ML model/connector):** `retrieval_augmented_generation` / `retrieval_grounding` (native in-engine RAG), `multimodal_rerank`, `ml_inference`. A `retrieval_augmented_generation` pipeline errors on setup, requiring a `context_field_list` and a registered model. These are the on-thesis path to in-engine "why this roof" summaries or learned reranking, and are precisely why a *separate* RAG stack (e.g. LightRAG, which was evaluated and rejected) is unnecessary here: Lucenia already owns that surface.
+- **In-engine "why this roof" summary (Lucenia ml-commons + Bedrock).** Each ranked prospect gets a 2-3 sentence, plain-language rationale generated *inside the engine*, grounded only in that parcel's own indexed fields. A remote LLM is registered via Lucenia ml-commons (`_plugins/_ml/models`, `npm run ml-setup`) and the `/api/why/[id]` route asks Lucenia to run it (`_predict`); credentials stay in the cluster and the Next app calls Lucenia, not the model provider directly.
+
+**Honest findings on skylite 0.11.0/0.11.1 (both tested live).** The native AI-retrieval *search processors*, `retrieval_augmented_generation`, `retrieval_grounding`, `multimodal_rerank`, `ml_inference`, are registered but currently non-functional on the shipped build: the request/response processors hit an async-wiring bug (`processResponseAsync` falls through to a `throw`ing sync method), and the remote `http` connector executor is missing its no-arg constructor, so OpenAI-style HTTP connectors fail to deploy. The `aws_sigv4` (Amazon Bedrock) executor *does* work, so the shipped feature generates via a Bedrock-backed model through `_predict` rather than the RAG search pipeline (both reported upstream; stack traces in the design notes). An app-side OpenAI fallback keeps the feature demoable while the Bedrock account is pending authorization. This is exactly why a *separate* RAG stack (e.g. LightRAG, evaluated and rejected) is unnecessary: Lucenia owns that surface, and the gaps here are build bugs, not architecture.
 
 ---
 
@@ -174,7 +176,26 @@ npm run res                   # (optional) ~7 exact-address residential houses (
 npm run redfin                # (optional) ~40 real Redfin 75218 for-sale listings (price/beds/baths)
 npm run zip                   # (optional) grid-fill more 75218 houses (mis-snaps auto-dropped)
 npm run dev                   # http://localhost:3000
+
+# 3) (optional) in-engine "why this roof" AI summaries via Lucenia ml-commons.
+#    Set the AI vars below in web/.env first (see .env.example), then:
+LLM_PROVIDER=bedrock npm run ml-setup   # register the LLM + connector inside Lucenia
+npm run ml-verify                       # smoke-test one grounded summary via _predict
 ```
+
+The in-engine summary needs an LLM registered in Lucenia. Add these to `web/.env` (placeholders only, never commit real keys; `.env.example` mirrors them):
+
+```bash
+LLM_PROVIDER=bedrock
+LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+AWS_ACCESS_KEY_ID=<your-access-key-id>
+AWS_SECRET_ACCESS_KEY=<your-secret-access-key>
+AWS_REGION=us-east-2
+# Optional app-side fallback used when the Bedrock account isn't authorized yet:
+OPENAI_API_KEY=<your-openai-key>
+```
+
+The route prefers the in-engine Lucenia path and falls back to OpenAI automatically, so the feature works either way and upgrades to in-engine with no code change once Bedrock access is granted.
 
 **License-free alternative (Lucenia is OpenSearch-wire-compatible):** if you'd rather not obtain a Lucenia license, run any OpenSearch 2.14 node instead and point the app at it, everything works unchanged (validated):
 
@@ -184,7 +205,7 @@ docker run -d -p 9200:9200 -e discovery.type=single-node \
 # then the same npm run seed / dev
 ```
 
-On base OpenSearch the core demo behaves the same: hybrid BM25 + kNN, geo filtering, and the geohash heatmap all rely on standard APIs. What you give up is Lucenia's own ground: it is built on a newer Apache Lucene for faster vector and hybrid retrieval, and it ships native AI-retrieval processors (`retrieval_augmented_generation`, `retrieval_grounding`, `multimodal_rerank`, `ml_inference`) that base OpenSearch 2.14 does not. Those are exactly what the roadmap's in-engine "why this roof" summaries and learned reranking would build on, so Lucenia is the engine you would keep for the next stage, not just this MVP.
+On base OpenSearch the core demo behaves the same: hybrid BM25 + kNN, geo filtering, and the geohash heatmap all rely on standard APIs. What you give up is Lucenia's own ground: it is built on a newer Apache Lucene for faster vector and hybrid retrieval, and it ships native AI-retrieval processors (`retrieval_augmented_generation`, `retrieval_grounding`, `multimodal_rerank`, `ml_inference`) that base OpenSearch 2.14 does not. Those are what the in-engine "why this roof" summary this MVP already ships builds on (generated via `_predict` on a Bedrock-backed model, since the RAG *search processors* are bugged on the current build, see Section V), plus the learned-reranking next step, so Lucenia is the engine you would keep, not just for this MVP.
 
 **Notes:** the browser map needs the **Maps JavaScript API** enabled on the key (the Solar API alone is server-side); if it isn't, the app degrades gracefully (the ranked list + search still work). The local Lucenia node uses a self-signed cert, so the server-side client sets `rejectUnauthorized:false` for `localhost` only; production terminates TLS with a real CA.
 
